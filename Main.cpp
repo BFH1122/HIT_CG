@@ -23,6 +23,8 @@
 #define ID_SMALL 1011
 #define ID_Play 1012
 
+#define ID_GAME_START 1013
+
 using namespace std;
 
 int POINTNUM = 0;//记录点的个数
@@ -43,7 +45,15 @@ struct point
 point Points[100];
 point window[4];
 point boundary[4][2];
+
+point Game_P[100];
+
+int PLAYER_POSITION = 0;//记录当前的玩家在哪个位置上
+
 int flag = 0;
+int N = 20;
+
+point Player_P;
 
 //全局变量
 static TCHAR szWindowClass[] = _T("win32app");
@@ -72,7 +82,10 @@ void MOVE_P(HDC hdc);
 void ROLL(HDC hdc, float angle);
 void B_S(HDC hdc, float xa, float xb);
 void Play(HDC hdc, HWND hWnd);
-
+void InitGameWindow(HDC hdc);
+void Player_Jump(HDC hdc, HWND hWnd);
+void setTimer();
+void newBreseHam(HDC hdc, int x0, int y0, int xEnd, int yEnd);
 void ellipse(HDC hDC, int x_left, int y_top, int x_right, int y_bottom, COLORREF color = RGB(255, 255, 255), int line_width = 1, int line_style = PS_SOLID);//椭圆
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -106,7 +119,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	SetMenu(hWnd, MainMenu);
 	HMENU MainMenu1 = GetMenu(hWnd);
 	AppendMenu(MainMenu1, MF_STRING, ID_Fill, "填充");
-	
+
 	HMENU PopMenu1 = CreatePopupMenu();
 	MainMenu1 = GetMenu(hWnd);
 	AppendMenu(PopMenu1, MF_STRING, ID_Y, "Y轴");
@@ -117,7 +130,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	AppendMenu(PopMenu1, MF_STRING, ID_MOVE, "平移");*/
 
 	AppendMenu(MainMenu1, MF_STRING | MF_POPUP, UINT(PopMenu1), "图形变换");
-	
+
 
 	HMENU PopMenu2 = CreatePopupMenu();
 	MainMenu1 = GetMenu(hWnd);
@@ -131,16 +144,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	AppendMenu(PopMenu3, MF_STRING, ID_BIG, "放大");
 	AppendMenu(PopMenu3, MF_STRING, ID_SMALL, "缩小");
 	AppendMenu(MainMenu1, MF_STRING | MF_POPUP, UINT(PopMenu3), "缩放");
-	
-	
+
+
 	MainMenu1 = GetMenu(hWnd);
 	AppendMenu(MainMenu1, MF_STRING, ID_SUB, "直线段截取");
 	MainMenu1 = GetMenu(hWnd);
 	AppendMenu(MainMenu1, MF_STRING, ID_Play, "动画");
-	
+
+	AppendMenu(MainMenu1, MF_STRING, ID_GAME_START, "开始游戏");
+
 
 	AppendMenu(MainMenu1, MF_STRING, ID_Clear, "清屏");
-	
+
 
 	ShowWindow(hWnd, nCmdShow);//显示
 	UpdateWindow(hWnd);//在显示前再次更新
@@ -164,59 +179,73 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 	case WM_COMMAND:
 		switch (wParam)
 		{
-			case ID_Line:
-				flag = 1;
-				break;
-			case ID_Fill:
-				flag = 2;
-				break;
-			case ID_Clear:
-				InvalidateRect(hWnd, NULL, true);
-				UpdateWindow(hWnd);
-				break;
-			case ID_SUB:
-				flag = 3;
-				InitWindow();
-				updateBound();
-				display(hdc);
-				POINTNUM = 0;
-				break;
-			case ID_Y:
-				flag = 4;
-				break;
-			case ID_X:
-				flag = 5;
-				break;
-			case ID_O:
-				flag = 6;
-				break;
-			case ID_MOVE:
-				flag = 7;
-				break;
-			case ID_ROLLL:
-				flag = 8;
-				break;
-			case ID_ROLLR:
-				flag = 9;
-				break;
-			case ID_BIG:
-				flag = 10;
-				break;
-			case ID_SMALL:
-				flag = 11;
-				break;
-			case ID_Play:
-				flag = 12;
-				break;
+		case ID_Line:
+			flag = 1;
+			break;
+		case ID_Fill:
+			flag = 2;
+			break;
+		case ID_Clear:
+			InvalidateRect(hWnd, NULL, true);
+			UpdateWindow(hWnd);
+			break;
+		case ID_SUB:
+			flag = 3;
+			InitWindow();
+			updateBound();
+			display(hdc);
+			POINTNUM = 0;
+			break;
+		case ID_Y:
+			flag = 4;
+			break;
+		case ID_X:
+			flag = 5;
+			break;
+		case ID_O:
+			flag = 6;
+			break;
+		case ID_MOVE:
+			flag = 7;
+			break;
+		case ID_ROLLL:
+			flag = 8;
+			break;
+		case ID_ROLLR:
+			flag = 9;
+			break;
+		case ID_BIG:
+			flag = 10;
+			break;
+		case ID_SMALL:
+			flag = 11;
+			break;
+		case ID_Play:
+			flag = 12;
+			break;
+		case ID_GAME_START://首先清屏，然后开始布局
+			InvalidateRect(hWnd, NULL, true);
+			UpdateWindow(hWnd);
+
+			InitGameWindow(hdc);
+
+			flag = 13;
+			break;
 		}
 		break;
 	case WM_LBUTTONDOWN:
+		if (flag == 13)
+		{
+			Points[0].x = x;
+			Points[0].y = y;
+			break;
+		}
 		Points[POINTNUM].x = x;
 		Points[POINTNUM].y = y;
 		POINTNUM++;
 		break;
 	case WM_RBUTTONDOWN:
-		All_Contro(hdc,hWnd);
+		All_Contro(hdc, hWnd);
 		break;
 	case WM_PAINT://重绘
 		hdc = BeginPaint(hWnd, &ps);
@@ -246,7 +275,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 void All_Contro(HDC hdc, HWND hWnd)
 {
 	if (flag == 1) {
-		line(hdc, Points[0].x, Points[0].y, Points[1].x, Points[1].y, RGB(0, 255, 0), 3);
+		if (Points[0].x<Points[1].x)
+			newBreseHam(hdc,Points[0].x, Points[0].y, Points[1].x, Points[1].y);
+		else
+			newBreseHam(hdc, Points[1].x, Points[1].y, Points[0].x, Points[0].y);
 		POINTNUM = 0;
 	}
 	else if (flag == 2)
@@ -306,11 +338,86 @@ void All_Contro(HDC hdc, HWND hWnd)
 	}
 	else if (flag == 12)
 	{
-		Play(hdc,hWnd);
+		Play(hdc, hWnd);
+	}
+	else if (flag == 13)
+	{
+		Player_Jump(hdc,hWnd);
 	}
 	else
 		POINTNUM = 0;
+}
 
+void Draw_Window(HDC hdc)
+{
+	//初始位置生成完毕
+	line(hdc, Game_P[0].x, Game_P[0].y, Game_P[0].x + 20, Game_P[0].y, RGB(255, 255, 0), 5);
+	for (int i = 1; i < N - 1; i++)
+	{
+		line(hdc, Game_P[i].x, Game_P[i].y, Game_P[i].x + 20, Game_P[i].y, RGB(255, 0, 0), 5);
+	}
+	line(hdc, Game_P[N - 1].x, Game_P[N - 1].y, Game_P[N - 1].x + 20, Game_P[N - 1].y, RGB(255, 0, 255), 5);
+}
+void InitGameWindow(HDC hdc)//左边界为780,下边界为500,判断手否失败的依据
+{
+	srand((unsigned)time(NULL));
+	Game_P[0].x = 10;
+	Game_P[0].y = 450;
+	//初始化玩家的位置，
+	Player_P.x = 10;
+	Player_P.y = 446;
+	int Postion_X ;
+	int Postion_Y ;
+	for (int i = 1; i < N; i++)
+	{
+		Postion_X = rand() % 50;
+		Postion_Y = rand() % 50;
+		Game_P[i].x = Game_P[i - 1].x + Postion_X + 20;
+		Game_P[i].y = Game_P[i - 1].y - Postion_Y - 10;
+		if (Game_P[i].y < 50) {
+			N = i;
+			break;
+		}
+	}
+	Draw_Window(hdc);
+	//画出玩家的起始位置
+	ellipse(hdc, Player_P.x, Player_P.y, Player_P.x + 10, Player_P.y - 10, RGB(0, 255, 0), 3);
+}
+
+void Player_Jump(HDC hdc, HWND hWnd) {  //根据起始点与指定的最高点来计算落点在哪里
+	int flag = 0;
+	float a = (Player_P.y - Points[0].y) / pow((Player_P.x - Points[0].x), 2);
+	float b = -2 * a*Points[0].x;
+	float c = Points[0].y - a * pow(Points[0].x, 2) - b * Points[0].x;
+	int dx = 1;
+	if (Points[0].x < Player_P.x)//如果最高点在当前点的左面,dx应该减一
+		dx = -1;
+	int y;
+	for (int i = Player_P.x;; i = i + dx)
+	{
+		y = a * pow(i, 2) + b * i + c;
+		COLORREF now = GetPixel(hdc, i+5, y+2);
+		if (i<0||i>780||y<0||y>500) {//出边界的情况
+			MessageBox(NULL, _T("sorry ! game over"), _T("Win32 Application"), NULL);
+			break;//计算出落点之后才可以停止，或者出边界可以停止，并给出相应的提示
+		}
+		else if ((RGB(255, 255, 0) == now || RGB(255, 0, 0) == now))//落到正点的位置
+		{
+			break;
+		}
+		else if (RGB(255, 0, 255) == now) {
+			//胜利的情况，到达终点
+			MessageBox(NULL, _T("you are good!"), _T("Win32 Application"), NULL);
+			break;
+		}
+		setTimer();
+		InvalidateRect(hWnd, NULL, true);
+		UpdateWindow(hWnd);
+		Draw_Window(hdc);
+		ellipse(hdc,i,y,i+10,y-10, RGB(255,200, 200), 3);
+		Player_P.x = i;
+		Player_P.y = y;
+	}
 }
 
 void display(HDC hdc) {
@@ -329,11 +436,11 @@ void drawPoly(HDC hdc)
 {
 	for (int i = 0; i<POINTNUM; i++)
 	{
-		line(hdc,Points[i].x, Points[i].y, Points[(i + 1) % POINTNUM].x, Points[(i + 1) % POINTNUM].y,RGB(255,0,0),3);
+		line(hdc, Points[i].x, Points[i].y, Points[(i + 1) % POINTNUM].x, Points[(i + 1) % POINTNUM].y, RGB(255, 0, 0), 3);
 	}
 }
 
-void Fill_Poly(HDC hdc,COLORREF newcolor)
+void Fill_Poly(HDC hdc, COLORREF newcolor)
 {
 	int MaxY = 0;
 	int MinY = 1000000;
@@ -546,16 +653,16 @@ point getIntersection(point line1[2], point line2[2])
 	return intersection;
 }
 
-void cohenSutherland(HDC hdc,point start,point end)
+void cohenSutherland(HDC hdc, point start, point end)
 {
 	int code0 = encode(start);
 	int code1 = encode(end);
 
-	if (code0 == 0 && code1 == 0)  
+	if (code0 == 0 && code1 == 0)
 		line(hdc, start.x, start.y, end.x, end.y, RGB(0, 255, 0), 3);
 	else
 	{
-		point in_Point[2];   
+		point in_Point[2];
 		in_Point[0] = start;
 		in_Point[1] = end;
 		for (int i = 0; i < 4; i++)
@@ -566,26 +673,26 @@ void cohenSutherland(HDC hdc,point start,point end)
 
 			if (current0 == current1)
 			{
-				if(current0==1)
+				if (current0 == 1)
 				{
 					line(hdc, in_Point[0].x, in_Point[0].y, in_Point[1].x, in_Point[1].y, RGB(255, 0, 0), 3);
 					return;
 				}
-				else  
+				else
 					continue;
 			}
-			else   
+			else
 			{
 				point p = getIntersection(in_Point, boundary[i]);
 				if (p.x != NAN && p.y != NAN)
 				{
-					if (current0 == 1)   
+					if (current0 == 1)
 					{
 						line(hdc, p.x, p.y, in_Point[0].x, in_Point[0].y, RGB(255, 0, 0), 3);
 						in_Point[0] = p;
 						code0 = encode(in_Point[0]);
 					}
-					else  
+					else
 					{
 						line(hdc, p.x, p.y, in_Point[1].x, in_Point[1].y, RGB(255, 0, 0), 3);
 						in_Point[1] = p;
@@ -598,7 +705,7 @@ void cohenSutherland(HDC hdc,point start,point end)
 	}
 }
 
-point mulmatrix(point pre,float matrix[3][3]) 
+point mulmatrix(point pre, float matrix[3][3])
 {
 	pre.x = pre.x*matrix[0][0] + pre.y*matrix[1][0] + matrix[2][0];
 	pre.y = pre.x*matrix[0][1] + pre.y*matrix[1][1] + matrix[2][1];
@@ -608,7 +715,7 @@ point mulmatrix(point pre,float matrix[3][3])
 void Y_symmetry(HDC hdc)
 {
 	drawPoly(hdc);
-	float matrix[3][3] = { {-1,0,0} ,{0,1,0} ,{800,0,1} };
+	float matrix[3][3] = { { -1,0,0 } ,{ 0,1,0 } ,{ 800,0,1 } };
 	for (int i = 0; i < POINTNUM; i++)
 	{
 		Points[i] = mulmatrix(Points[i], matrix);
@@ -649,7 +756,7 @@ void MOVE_P(HDC hdc) {
 	drawPoly(hdc);
 }
 
-void ROLL(HDC hdc,float angle)
+void ROLL(HDC hdc, float angle)
 {
 	int x = Points[0].x;
 	int y = Points[0].y;
@@ -672,7 +779,7 @@ void ROLL(HDC hdc,float angle)
 	drawPoly(hdc);
 }
 
-void B_S(HDC hdc,float xa,float xb)
+void B_S(HDC hdc, float xa, float xb)
 {
 	int x = Points[0].x;
 	int y = Points[0].y;
@@ -682,12 +789,12 @@ void B_S(HDC hdc,float xa,float xb)
 	{
 		Points[i] = mulmatrix(Points[i], matrix);
 	}
-	float matrix1[3][3] = { {xa,0,0 } ,{0,xb,0 } ,{ 0,0,1 } };
+	float matrix1[3][3] = { { xa,0,0 } ,{ 0,xb,0 } ,{ 0,0,1 } };
 	for (int i = 0; i < POINTNUM; i++)
 	{
 		Points[i] = mulmatrix(Points[i], matrix1);
 	}
-	float matrix2[3][3] = { { 1,0,0 } ,{ 0,1,0 } ,{ x+100,y+100,1 } };
+	float matrix2[3][3] = { { 1,0,0 } ,{ 0,1,0 } ,{ x + 100,y + 100,1 } };
 	for (int i = 0; i < POINTNUM; i++)
 	{
 		Points[i] = mulmatrix(Points[i], matrix2);
@@ -724,7 +831,7 @@ void Play(HDC hdc, HWND hWnd)
 	int yflag = 0;
 	while (true)
 	{
-		ellipse(hdc, x-40, y-40, x-30, y-30, RGB(0, 255, 0), 3);
+		ellipse(hdc, x - 40, y - 40, x - 30, y - 30, RGB(0, 255, 0), 3);
 		ellipse(hdc, x, y, x + 10, y + 10, RGB(0, 255, 0), 3);
 		if (x + 10 > 800)
 			xflag = 1;
@@ -745,5 +852,52 @@ void Play(HDC hdc, HWND hWnd)
 		setTimer();
 		InvalidateRect(hWnd, NULL, true);
 		UpdateWindow(hWnd);
+	}
+}
+
+
+void newBreseHam(HDC hdc,int x0, int y0, int xEnd, int yEnd) {
+	int dx = xEnd - x0;
+	int dy = yEnd - y0;
+	int x = x0, y = y0;
+	int flag = 0;
+	int flagz = 0;
+	COLORREF newcolor=RGB(0,0,0);
+	if (dy <= 0) //判断斜率为负
+	{
+		dy = -dy;
+		flagz = 1;
+	}
+	if (dx <= dy)//斜率大于=1的情况
+	{
+		flag = 1;
+		int t = dy;
+		dy = dx;
+		dx = t;
+		t = x;
+		x = y;
+		y = t;
+	}
+	int e = 2 * dy - dx;
+	for (int i = 0; i < dx; i++)
+	{
+		if (flag == 0 && flagz == 0)//斜率小于1并且正
+			SetPixel(hdc, x, y, newcolor);
+		else if (flag == 1 && flagz == 0)//斜率小于1并且正
+			SetPixel(hdc, y, x, newcolor);
+		else if (flag == 0 && flagz == 1)//斜率小于1并且负
+			SetPixel(hdc, x, 2 * y0 - y, newcolor);
+		else
+			SetPixel(hdc, y, 2 * y0 - x, newcolor);
+		if (e >= 0)
+		{
+			y = y + 1;
+			e = e + 2 * dy - 2 * dx;
+		}
+		else
+		{
+			e = e + 2 * dy;
+		}
+		x = x + 1;
 	}
 }
